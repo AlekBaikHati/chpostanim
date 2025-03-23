@@ -90,21 +90,9 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/health':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b'OK')
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-
 def run_http_server():
     server_address = ('', 8000)
-    httpd = BaseHTTPServer(server_address, HealthCheckHandler)
+    httpd = BaseHTTPServer(server_address, SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
 
