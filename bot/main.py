@@ -107,9 +107,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     current_index = context.user_data.get('current_index', 0)
     title = context.user_data.get('title', "No title available")
     link = context.user_data.get('link', "No link available")
+    
     # Escape karakter yang diperlukan untuk Markdown V2
     link = re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', link)  # Escape karakter khusus
-    caption = f"{title}\n>{link}"
+    caption = f"{title}\n\n>{link}\n"  # Pastikan newline ada di sini
 
     if data == 'next':
         if current_index < len(images) - 1:
@@ -121,6 +122,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 current_index += 1
                 # Kirim ke CH_KOLEKSI
                 await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=image_url, caption=caption, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
+        
         context.user_data['current_index'] = current_index
         image_url = images[current_index]
         await query.message.edit_media(
