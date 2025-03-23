@@ -11,6 +11,7 @@ import time
 from bot.utilities.http_server import run_http_server  # Import server HTTP jika diperlukan
 import nest_asyncio
 import re
+import threading
 
 # Muat variabel lingkungan dari .env
 load_dotenv()
@@ -173,9 +174,15 @@ def create_mode_keyboard(current_index: int) -> list:
     keyboard.append([InlineKeyboardButton("Cancel", callback_data='close')])
     return keyboard
 
+# Fungsi untuk menjalankan server HTTP di thread terpisah
+def start_http_server():
+    server_thread = threading.Thread(target=run_http_server)
+    server_thread.daemon = True
+    server_thread.start()
+
 async def main() -> None:
-    # Mulai server HTTP jika diperlukan
-    # run_http_server()
+    # Mulai server HTTP
+    start_http_server()  # Panggil server HTTP
 
     application = Application.builder().token(API_TOKEN).build()
     application.add_handler(MessageHandler(filters.TEXT & filters.Entity("url"), handle_message))
