@@ -168,7 +168,7 @@ def create_mode_keyboard(current_index: int) -> list:
     keyboard = []
     if current_index > 0:
         keyboard.append([InlineKeyboardButton("Back", callback_data='back'), InlineKeyboardButton("Next", callback_data='next')])
-            else:
+    else:
         keyboard.append([InlineKeyboardButton("Next", callback_data='next')])
     keyboard.append([InlineKeyboardButton("Post", callback_data='post')])
     keyboard.append([InlineKeyboardButton("Cancel", callback_data='close')])
