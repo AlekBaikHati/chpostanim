@@ -48,10 +48,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Cek apakah bot sedang memproses permintaan lain
         if context.user_data.get('processing', False):
             sent_message = await message.reply_text("Proses sedang berjalan. Tunggu atau batalkan.")
-            # Hapus pesan setelah 3 detik
             await asyncio.sleep(3)
             await sent_message.delete()
-        return
+            return
 
         # Fungsi untuk mengekstrak URL dari entitas
         def extract_urls(entities, text):
@@ -99,8 +98,6 @@ async def handle_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=image_url, caption=caption, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
     else:
             await update.message.reply_text("Gagal mendapatkan gambar. Coba lagi nanti.")
-    else:
-        await update.message.reply_text("Tidak ada link yang disimpan. Kirimkan link terlebih dahulu.")
 
 # Fungsi untuk menangani tombol
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
