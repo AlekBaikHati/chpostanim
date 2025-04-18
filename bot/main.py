@@ -58,11 +58,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except telegram.error.BadRequest:
         pass  # Pesan mungkin sudah dihapus
 
-# Fungsi untuk memulai bot dengan menampilkan gambar anime acak
+# Fungsi untuk mengekstrak URL dari teks menggunakan regex
+def extract_urls_from_text(text):
+    # Regex untuk mendeteksi URL
+    url_pattern = re.compile(r'https?://[^\s]+')
+    return url_pattern.findall(text)
+
+# Fungsi untuk mengekstrak URL dari entitas dan teks
+def extract_urls(entities, text):
+    urls = []
+    # Tambahkan URL dari entitas
+    if entities:
+        for entity in entities:
+            if entity.type == "url":
+                urls.append(text[entity.offset:entity.offset + entity.length])
+    # Tambahkan URL yang terdeteksi oleh regex
+    urls.extend(extract_urls_from_text(text))
+    return urls
+
+# Fungsi untuk menangani pesan
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
     if message:
-        # Log entitas dalam pesan
+        logger.info(f"Pesan diterima: {message.text}")  # Tambahkan log ini
         logger.info(f"Entities: {message.entities}")
         logger.info(f"Caption Entities: {message.caption_entities}")
 
@@ -84,15 +102,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await sent_message.delete()
             return
 
-        # Fungsi untuk mengekstrak URL dari entitas
-        def extract_urls(entities, text):
-            urls = []
-            if entities:
-                for entity in entities:
-                    if entity.type == "url":
-                        urls.append(text[entity.offset:entity.offset + entity.length])
-            return urls
-
         # Periksa semua entitas dalam pesan untuk menemukan URL
         urls = extract_urls(message.entities, message.text or "") + extract_urls(message.caption_entities, message.caption or "")
 
@@ -102,15 +111,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             context.user_data['link'] = urls[0]  # Simpan link
             context.user_data['processing'] = True  # Set flag processing
             sent_message = await message.reply_text(
-                "📝 Silakan kirimkan judul untuk link ini.",
+                "✎ Silakan kirimkan judul untuk link ini.",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📌 JUDUL DEFAULT", callback_data='default_title')],
-                    [InlineKeyboardButton("❌ Cancel", callback_data='cancel')]
+                    [InlineKeyboardButton("❆ DEFAULT ❆", callback_data='default_title')],
+                    [InlineKeyboardButton("✘ BATAL ✘", callback_data='cancel')]
                 ])
             )
             context.user_data['sent_message_id'] = sent_message.message_id  # Simpan ID pesan
         else:
-            await message.reply_text("❗ Tidak ada link yang ditemukan dalam pesan.")
+            sent_message = await message.reply_text("❗ Tidak ada link yang ditemukan dalam pesan.")
+            await asyncio.sleep(3)
+            await sent_message.delete()
     else:
         logger.info("menerima pesan dari channel abaikan saja")
 
@@ -141,7 +152,9 @@ async def handle_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_photo(photo=DEFAULT_PHOTO_URL, caption=caption, reply_markup=reply_markup, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
         # Jangan kirim foto default ke CH_KOLEKSI
     else:
-        await update.message.reply_text("⚠️ Gagal mendapatkan gambar. Coba lagi nanti.")
+        sent_message = await update.message.reply_text("✘ Gagal mendapatkan gambar. Coba lagi.")
+        await asyncio.sleep(3)  # Tunggu 3 detik
+        await sent_message.delete()  # Hapus pesan
 
 # Fungsi untuk menangani tombol
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -222,11 +235,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             koleksi_link = f"https://t.me/c/{koleksi_channel_id}/{context.user_data.get('koleksi_message_id', '')}"
         
         await query.message.edit_caption(
-            caption="✅ SUKSES POST",
+            caption="❆ SUKSES POST\n(੭˃ᴗ˂)੭\n",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔗 LIHAT CH POSTINGAN", url=post_link)],
-                [InlineKeyboardButton("🔗 LIHAT CH KOLEKSI", url=koleksi_link)],
-                [InlineKeyboardButton("❌ Cancel", callback_data='close')]
+                [InlineKeyboardButton("➲ LIHAT CH POSTINGAN", url=post_link)],
+                [InlineKeyboardButton("➲ LIHAT CH KOLEKSI", url=koleksi_link)],
+                [InlineKeyboardButton("✘ Tutup ✘", callback_data='close')]
             ])
         )
         # Reset flag processing setelah posting selesai
@@ -239,11 +252,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def create_mode_keyboard(current_index: int) -> list:
     keyboard = []
     if current_index > 0:
-        keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data='back'), InlineKeyboardButton("➡️ Next", callback_data='next')])
+        keyboard.append([InlineKeyboardButton("⋘ Back", callback_data='back'), InlineKeyboardButton("Next ⋙ ", callback_data='next')])
     else:
-        keyboard.append([InlineKeyboardButton("➡️ Next", callback_data='next')])
-    keyboard.append([InlineKeyboardButton("📤 Post", callback_data='post')])
-    keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data='close')])
+        keyboard.append([InlineKeyboardButton("Next ⋙", callback_data='next')])
+    keyboard.append([InlineKeyboardButton("⬆️ Post ⬆️", callback_data='post')])
+    keyboard.append([InlineKeyboardButton("✘ BATAL ✘", callback_data='close')])
     return keyboard
 
 # Fungsi untuk menjalankan server HTTP di thread terpisah
@@ -259,9 +272,9 @@ async def main() -> None:
     application = Application.builder().token(API_TOKEN).build()
     application.add_handler(CommandHandler("start", start))  # Tambahkan handler untuk /start
     application.add_handler(MessageHandler(filters.TEXT & filters.Entity("url"), handle_message))  # Tambahkan handler untuk pesan teks yang berisi URL
-    application.add_handler(MessageHandler(filters.PHOTO & filters.Entity("url"), handle_message))  # Tambahkan handler untuk pesan foto yang berisi URL di caption
+    application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, handle_message))  # Tambahkan handler untuk pesan media
     application.add_handler(MessageHandler(filters.TEXT & ~filters.Entity("url"), handle_title))  # Tambahkan handler untuk pesan teks yang tidak berisi URL
-    application.add_handler(MessageHandler(filters.FORWARDED & filters.Entity("url"), handle_message))  # Tambahkan handler untuk pesan diteruskan yang berisi URL
+    application.add_handler(MessageHandler(filters.FORWARDED, handle_message))  # Tambahkan handler untuk pesan diteruskan
     application.add_handler(CallbackQueryHandler(button))
     logger.info("Bot dimulai dan siap menerima pesan.")
     await application.run_polling()
