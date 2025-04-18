@@ -19,7 +19,9 @@ load_dotenv()
 # Konfigurasi bot
 API_TOKEN = os.getenv('API_TOKEN')
 CH_KOLEKSI = os.getenv('CH_KOLEKSI')  # Bisa berupa ID atau @username
-CH_POST = os.getenv('CH_POST')  # Bisa berupa ID atau @username
+CH_POST = os.getenv('CH_POST')  # Bisa berupa ID atau @username!
+DEFAULT_TITLE = os.getenv('DEFAULT_TITLE')
+DEFAULT_PHOTO_URL = os.getenv('DEFAULT_PHOTO_URL')
 
 # Set up logging
 logging.basicConfig(
@@ -67,10 +69,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if urls:
             context.user_data['link'] = urls[0]  # Simpan link
             context.user_data['processing'] = True  # Set flag processing
-            await message.reply_text(
+            sent_message = await message.reply_text(
                 "Silakan kirimkan judul untuk link ini.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data='cancel')]])
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("JUDUL DEFAULT", callback_data='default_title')],
+                    [InlineKeyboardButton("Cancel", callback_data='cancel')]
+                ])
             )
+            context.user_data['sent_message_id'] = sent_message.message_id  # Simpan ID pesan
         else:
             await message.reply_text("Tidak ada link yang ditemukan dalam pesan.")
     else:
@@ -80,24 +86,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def handle_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     title = update.message.text
     if 'link' in context.user_data:
+        # Hapus pesan pengguna dan pesan permintaan judul
+        await update.message.delete()
+        if 'sent_message_id' in context.user_data:
+            try:
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=context.user_data['sent_message_id'])
+            except telegram.error.BadRequest:
+                pass  # Pesan mungkin sudah dihapus
+
         # Ubah judul menjadi huruf kapital dan tebal, dan tambahkan emoji
         formatted_title = f"🏷 *{title.upper()}*"
         context.user_data['title'] = formatted_title  # Simpan judul yang sudah diformat
-        image_url = await get_random_anime_image()
-        if image_url:
-            context.user_data['images'] = [image_url]  # Simpan URL gambar dalam list
-            context.user_data['current_index'] = 0  # Set indeks saat ini ke 0
-            # Escape karakter yang diperlukan untuk Markdown V2
-            link = context.user_data['link']
-            link = re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', link)  # Escape karakter khusus
-            caption = f"{formatted_title}\n\n>{link}\n"  # Gabungkan judul dan link dengan blockquote dan dua garis baru
-            keyboard = create_mode_keyboard(0)
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_photo(photo=image_url, caption=caption, reply_markup=reply_markup, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
-            # Kirim ke CH_KOLEKSI
-            await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=image_url, caption=caption, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
+        # Gunakan foto default pertama kali
+        context.user_data['images'] = [DEFAULT_PHOTO_URL]
+        context.user_data['current_index'] = 0
+        # Escape karakter yang diperlukan untuk Markdown V2
+        link = context.user_data['link']
+        link = re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', link)  # Escape karakter khusus
+        caption = f"{formatted_title}\n\n>{link}\n"  # Gabungkan judul dan link dengan blockquote dan dua garis baru
+        keyboard = create_mode_keyboard(0)
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_photo(photo=DEFAULT_PHOTO_URL, caption=caption, reply_markup=reply_markup, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
+        # Kirim ke CH_KOLEKSI
+        await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=DEFAULT_PHOTO_URL, caption=caption, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
     else:
-            await update.message.reply_text("Gagal mendapatkan gambar. Coba lagi nanti.")
+        await update.message.reply_text("Gagal mendapatkan gambar. Coba lagi nanti.")
 
 # Fungsi untuk menangani tombol
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -112,7 +125,26 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     link = re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', link)  # Escape karakter khusus
     caption = f"{title}\n\n>{link}\n"  # Pastikan newline ada di sini
 
-    if data == 'next':
+    if data == 'default_title':
+        # Hapus pesan permintaan judul
+        if 'sent_message_id' in context.user_data:
+            try:
+                await context.bot.delete_message(chat_id=query.message.chat_id, message_id=context.user_data['sent_message_id'])
+            except telegram.error.BadRequest:
+                pass  # Pesan mungkin sudah dihapus
+
+        # Set judul default dan escape karakter khusus
+        default_title = DEFAULT_TITLE
+        context.user_data['title'] = default_title
+        # Gunakan foto default pertama kali
+        context.user_data['images'] = [DEFAULT_PHOTO_URL]
+        context.user_data['current_index'] = 0
+        caption = f"{default_title}\n\n>{link}\n"
+        keyboard = create_mode_keyboard(0)
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_photo(photo=DEFAULT_PHOTO_URL, caption=caption, reply_markup=reply_markup, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
+        await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=DEFAULT_PHOTO_URL, caption=caption, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
+    elif data == 'next':
         if current_index < len(images) - 1:
             current_index += 1
         else:
