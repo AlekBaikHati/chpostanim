@@ -43,15 +43,20 @@ async def get_random_anime_image():
 # Fungsi untuk menangani perintah /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     start_message = (
-        "Selamat datang di Bot Koleksi Anime!\n\n"
-        "Cara menggunakan bot ini:\n"
-        "1. Kirimkan pesan yang berisi link.\n"
-        "2. Pilih judul default atau masukkan judul manual.\n"
-        "3. Pilih gambar yang ingin diposting.\n"
-        "4. Tekan 'Post' untuk memposting ke channel.\n\n"
-        "Bot ini hanya dapat digunakan oleh admin yang terdaftar."
+        "👋 Selamat datang di Bot Koleksi Anime!\n\n"
+        "📋 Cara menggunakan bot ini:\n"
+        "1️⃣ Kirimkan pesan yang berisi link.\n"
+        "2️⃣ Pilih judul default atau masukkan judul manual.\n"
+        "3️⃣ Pilih gambar yang ingin diposting.\n"
+        "4️⃣ Tekan 'Post' untuk memposting ke channel.\n\n"
+        "⚠️ Bot ini hanya dapat digunakan oleh admin yang terdaftar."
     )
-    await update.message.reply_text(start_message)
+    sent_message = await update.message.reply_text(start_message)
+    await asyncio.sleep(5)  # Tunggu 5 detik
+    try:
+        await sent_message.delete()  # Hapus pesan
+    except telegram.error.BadRequest:
+        pass  # Pesan mungkin sudah dihapus
 
 # Fungsi untuk memulai bot dengan menampilkan gambar anime acak
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -67,14 +72,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         # Cek apakah pengguna adalah admin
         if update.effective_user.id not in ALLOWED_USERS:
-            await message.reply_text("Maaf, Anda tidak diizinkan menggunakan bot ini.")
+            await message.reply_text("🚫 Maaf, Anda tidak diizinkan menggunakan bot ini.")
             return
 
         # Cek apakah bot sedang memproses permintaan lain
         if context.user_data.get('processing', False):
             # Hapus pesan pengguna
             await message.delete()
-            sent_message = await message.reply_text("Proses sedang berjalan. Tunggu atau batalkan.")
+            sent_message = await message.reply_text("⏳ Proses sedang berjalan. Tunggu atau batalkan.")
             await asyncio.sleep(3)
             await sent_message.delete()
             return
@@ -97,15 +102,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             context.user_data['link'] = urls[0]  # Simpan link
             context.user_data['processing'] = True  # Set flag processing
             sent_message = await message.reply_text(
-                "Silakan kirimkan judul untuk link ini.",
+                "📝 Silakan kirimkan judul untuk link ini.",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("JUDUL DEFAULT", callback_data='default_title')],
-                    [InlineKeyboardButton("Cancel", callback_data='cancel')]
+                    [InlineKeyboardButton("📌 JUDUL DEFAULT", callback_data='default_title')],
+                    [InlineKeyboardButton("❌ Cancel", callback_data='cancel')]
                 ])
             )
             context.user_data['sent_message_id'] = sent_message.message_id  # Simpan ID pesan
         else:
-            await message.reply_text("Tidak ada link yang ditemukan dalam pesan.")
+            await message.reply_text("❗ Tidak ada link yang ditemukan dalam pesan.")
     else:
         logger.info("menerima pesan dari channel abaikan saja")
 
@@ -136,7 +141,7 @@ async def handle_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_photo(photo=DEFAULT_PHOTO_URL, caption=caption, reply_markup=reply_markup, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
         # Jangan kirim foto default ke CH_KOLEKSI
     else:
-        await update.message.reply_text("Gagal mendapatkan gambar. Coba lagi nanti.")
+        await update.message.reply_text("⚠️ Gagal mendapatkan gambar. Coba lagi nanti.")
 
 # Fungsi untuk menangani tombol
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -179,7 +184,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 images.append(image_url)
                 current_index += 1
                 # Kirim ke CH_KOLEKSI tanpa caption
-                await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=image_url)
+                koleksi_message = await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=image_url)
+                context.user_data['koleksi_message_id'] = koleksi_message.message_id  # Simpan ID pesan koleksi
         
         context.user_data['current_index'] = current_index
         image_url = images[current_index]
@@ -207,11 +213,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             channel_id = CH_POST.lstrip('-100')
             post_link = f"https://t.me/c/{channel_id}/{message.message_id}"
         
+        # Buat link koleksi berdasarkan format yang tepat
+        if CH_KOLEKSI.startswith('@'):
+            koleksi_link = f"https://t.me/{CH_KOLEKSI.lstrip('@')}/{context.user_data.get('koleksi_message_id', '')}"
+        else:
+            # Jika CH_KOLEKSI adalah ID channel, hapus '-100' dari ID
+            koleksi_channel_id = CH_KOLEKSI.lstrip('-100')
+            koleksi_link = f"https://t.me/c/{koleksi_channel_id}/{context.user_data.get('koleksi_message_id', '')}"
+        
         await query.message.edit_caption(
-            caption="SUKSES POST",
+            caption="✅ SUKSES POST",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("LIHAT POSTINGAN", url=post_link)],
-                [InlineKeyboardButton("Cancel", callback_data='close')]
+                [InlineKeyboardButton("🔗 LIHAT CH POSTINGAN", url=post_link)],
+                [InlineKeyboardButton("🔗 LIHAT CH KOLEKSI", url=koleksi_link)],
+                [InlineKeyboardButton("❌ Cancel", callback_data='close')]
             ])
         )
         # Reset flag processing setelah posting selesai
@@ -224,11 +239,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def create_mode_keyboard(current_index: int) -> list:
     keyboard = []
     if current_index > 0:
-        keyboard.append([InlineKeyboardButton("Back", callback_data='back'), InlineKeyboardButton("Next", callback_data='next')])
+        keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data='back'), InlineKeyboardButton("➡️ Next", callback_data='next')])
     else:
-        keyboard.append([InlineKeyboardButton("Next", callback_data='next')])
-    keyboard.append([InlineKeyboardButton("Post", callback_data='post')])
-    keyboard.append([InlineKeyboardButton("Cancel", callback_data='close')])
+        keyboard.append([InlineKeyboardButton("➡️ Next", callback_data='next')])
+    keyboard.append([InlineKeyboardButton("📤 Post", callback_data='post')])
+    keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data='close')])
     return keyboard
 
 # Fungsi untuk menjalankan server HTTP di thread terpisah
