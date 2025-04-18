@@ -19,9 +19,10 @@ load_dotenv()
 # Konfigurasi bot
 API_TOKEN = os.getenv('API_TOKEN')
 CH_KOLEKSI = os.getenv('CH_KOLEKSI')  # Bisa berupa ID atau @username
-CH_POST = os.getenv('CH_POST')  # Bisa berupa ID atau @username!
+CH_POST = os.getenv('CH_POST')  # Bisa berupa ID atau @username
 DEFAULT_TITLE = os.getenv('DEFAULT_TITLE')
 DEFAULT_PHOTO_URL = os.getenv('DEFAULT_PHOTO_URL')
+ALLOWED_USERS = set(map(int, os.getenv('ALLOWED_USERS', '').split(',')))
 
 # Set up logging
 logging.basicConfig(
@@ -39,16 +40,40 @@ async def get_random_anime_image():
         return response.url
     return None
 
+# Fungsi untuk menangani perintah /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    start_message = (
+        "Selamat datang di Bot Koleksi Anime!\n\n"
+        "Cara menggunakan bot ini:\n"
+        "1. Kirimkan pesan yang berisi link.\n"
+        "2. Pilih judul default atau masukkan judul manual.\n"
+        "3. Pilih gambar yang ingin diposting.\n"
+        "4. Tekan 'Post' untuk memposting ke channel.\n\n"
+        "Bot ini hanya dapat digunakan oleh admin yang terdaftar."
+    )
+    await update.message.reply_text(start_message)
+
 # Fungsi untuk memulai bot dengan menampilkan gambar anime acak
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
     if message:
+        # Log entitas dalam pesan
+        logger.info(f"Entities: {message.entities}")
+        logger.info(f"Caption Entities: {message.caption_entities}")
+
         # Abaikan pesan yang bukan dari chat pribadi
         if message.chat.type != 'private':
             return
 
+        # Cek apakah pengguna adalah admin
+        if update.effective_user.id not in ALLOWED_USERS:
+            await message.reply_text("Maaf, Anda tidak diizinkan menggunakan bot ini.")
+            return
+
         # Cek apakah bot sedang memproses permintaan lain
         if context.user_data.get('processing', False):
+            # Hapus pesan pengguna
+            await message.delete()
             sent_message = await message.reply_text("Proses sedang berjalan. Tunggu atau batalkan.")
             await asyncio.sleep(3)
             await sent_message.delete()
@@ -67,6 +92,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         urls = extract_urls(message.entities, message.text or "") + extract_urls(message.caption_entities, message.caption or "")
 
         if urls:
+            # Hapus pesan pengguna
+            await message.delete()
             context.user_data['link'] = urls[0]  # Simpan link
             context.user_data['processing'] = True  # Set flag processing
             sent_message = await message.reply_text(
@@ -107,8 +134,7 @@ async def handle_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         keyboard = create_mode_keyboard(0)
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_photo(photo=DEFAULT_PHOTO_URL, caption=caption, reply_markup=reply_markup, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
-        # Kirim ke CH_KOLEKSI
-        await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=DEFAULT_PHOTO_URL, caption=caption, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
+        # Jangan kirim foto default ke CH_KOLEKSI
     else:
         await update.message.reply_text("Gagal mendapatkan gambar. Coba lagi nanti.")
 
@@ -143,7 +169,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = create_mode_keyboard(0)
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.reply_photo(photo=DEFAULT_PHOTO_URL, caption=caption, reply_markup=reply_markup, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
-        await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=DEFAULT_PHOTO_URL, caption=caption, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
+        # Jangan kirim foto default ke CH_KOLEKSI
     elif data == 'next':
         if current_index < len(images) - 1:
             current_index += 1
@@ -152,8 +178,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             if image_url:
                 images.append(image_url)
                 current_index += 1
-                # Kirim ke CH_KOLEKSI
-                await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=image_url, caption=caption, parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
+                # Kirim ke CH_KOLEKSI tanpa caption
+                await context.bot.send_photo(chat_id=CH_KOLEKSI, photo=image_url)
         
         context.user_data['current_index'] = current_index
         image_url = images[current_index]
@@ -216,8 +242,11 @@ async def main() -> None:
     start_http_server()  # Panggil server HTTP
 
     application = Application.builder().token(API_TOKEN).build()
-    application.add_handler(MessageHandler(filters.TEXT & filters.Entity("url"), handle_message))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.Entity("url"), handle_title))
+    application.add_handler(CommandHandler("start", start))  # Tambahkan handler untuk /start
+    application.add_handler(MessageHandler(filters.TEXT & filters.Entity("url"), handle_message))  # Tambahkan handler untuk pesan teks yang berisi URL
+    application.add_handler(MessageHandler(filters.PHOTO & filters.Entity("url"), handle_message))  # Tambahkan handler untuk pesan foto yang berisi URL di caption
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.Entity("url"), handle_title))  # Tambahkan handler untuk pesan teks yang tidak berisi URL
+    application.add_handler(MessageHandler(filters.FORWARDED & filters.Entity("url"), handle_message))  # Tambahkan handler untuk pesan diteruskan yang berisi URL
     application.add_handler(CallbackQueryHandler(button))
     logger.info("Bot dimulai dan siap menerima pesan.")
     await application.run_polling()
