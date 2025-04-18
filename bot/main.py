@@ -79,7 +79,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if context.user_data.get('processing', False):
             # Hapus pesan pengguna
             await message.delete()
-            sent_message = await message.reply_text("⏳ Proses sedang berjalan. Tunggu atau batalkan.")
+            sent_message = await message.reply_text("⏳ Proses sedang berjalan. Lanjutkan proses sebelumnya atau batalkan.")
             await asyncio.sleep(3)
             await sent_message.delete()
             return
